@@ -4,14 +4,16 @@ const User = require('../models/User');
 const { JWT_SECRET } = require('../middleware/auth');
 
 // Seed mock database with an admin user if in-memory
+// Seed mock and real database with an admin user on startup
 const seedMockAdmin = async () => {
+  // 1. Seed global mock array for Mock Mode
   if (!global.mockUsers) global.mockUsers = [];
-  const adminExists = global.mockUsers.some(u => u.email === 'admin@resumeiq.com');
+  const adminExistsMock = global.mockUsers.some(u => u.email === 'admin@resumeiq.com');
   
-  if (!adminExists) {
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('AdminPass123!', salt);
-    
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash('AdminPass123!', salt);
+
+  if (!adminExistsMock) {
     global.mockUsers.push({
       _id: '507f1f77bcf86cd799439011',
       name: 'System Administrator',
@@ -25,9 +27,33 @@ const seedMockAdmin = async () => {
     });
     console.log('[Mock DB] Seeded default mock admin account: admin@resumeiq.com / AdminPass123!');
   }
+
+  // 2. Seed Real MongoDB if connected and admin does not exist
+  try {
+    // Wait briefly for connection checks to register DB mode status
+    setTimeout(async () => {
+      if (process.env.USE_MOCK_DB !== 'true') {
+        const adminExistsReal = await User.findOne({ email: 'admin@resumeiq.com' });
+        if (!adminExistsReal) {
+          await User.create({
+            name: 'System Administrator',
+            email: 'admin@resumeiq.com',
+            password: 'AdminPass123!', // User model will hash this automatically in pre-save
+            role: 'admin',
+            profileCompletion: 100,
+            skills: ['Security Auditing', 'Systems Administration', 'Telemetry Orchestration'],
+            experienceLevel: 'Executive'
+          });
+          console.log('[Real DB] Seeded default admin account: admin@resumeiq.com / AdminPass123!');
+        }
+      }
+    }, 4000);
+  } catch (err) {
+    console.warn('[DB Seeding] Could not seed admin account to real DB:', err.message);
+  }
 };
 
-// Auto seed on startup if using mock DB
+// Auto seed on startup
 seedMockAdmin();
 
 const generateToken = (id) => {
